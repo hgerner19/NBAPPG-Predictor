@@ -1,0 +1,316 @@
+---
+title: "Final Project"
+author: "Holden Gerner"
+date: '2022-10-26'
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(mosaic)
+library(knitr)
+library(tinytex)
+library(ISLR2)
+
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(out.width = "50%")
+
+```
+
+
+```{r}
+nba1 <- read.csv("/Users/holdendeeznuts/Desktop/STAT 3400/withRatings_stats_2022.csv")
+
+```
+
+
+## remodeling dataset in which the things that were selected were the response 
+## and predictor variables
+```{r}
+nba_remodel1 <- nba1 %>%
+  select(PPG, USGpc, Pos, AST, TRB, TOV,STL, MP, G)
+
+
+```
+
+
+## Opening other two datasets and mutating them
+```{r}
+nba2 <- read.csv("/Users/holdendeeznuts/Desktop/STAT 3400/withRatings_stats_2021.csv")
+
+nba3 <-  read.csv("/Users/holdendeeznuts/Desktop/STAT 3400/withRatings_stats_2019.csv")
+
+
+nba_remodel2 <- nba2 %>%
+  select(PPG, USGpc, Pos, AST, TRB, TOV,STL, MP, G)
+
+nba_remodel3 <- nba3 %>%
+  select(PPG, USGpc, Pos, AST, TRB, TOV, STL, MP, G)
+
+```
+
+
+## Merging all three remodeled nba datasets
+```{r}
+nba_merged <- rbind(nba_remodel1, nba_remodel2,nba_remodel3)
+
+
+## Adding a new column called MPPG // (MP/G) //
+nba_merged <- nba_merged %>%
+  mutate(MP = (MP/G))
+nba_merged <- nba_merged %>%
+  mutate(AST = (AST/G))
+nba_merged <- nba_merged %>%
+  mutate(TRB = (TRB/G))
+nba_merged <- nba_merged %>%
+  mutate(STL = (STL/G))
+nba_merged <- nba_merged %>%
+  mutate(TOV = (TOV/G))
+
+
+## Removing players that have played less than 10 minutes per game. (Went from 1265 down to 1164)
+nba_merged2 <- subset(nba_merged, MP > 10)
+nba_merged3 <- subset(nba_merged2, Pos == 'PG' | Pos == 'SG' | Pos == 'SF' | Pos == 'PF' | Pos == 'C')
+nba_merged4 <- subset(nba_merged3, select = -(G))
+
+```
+
+
+## Taking a random sample of 600 from nba_merged4
+```{r}
+
+set.seed(719)
+sample12 <- sample.int(n=nrow(nba_merged4),size=floor(0.53*nrow(nba_merged4)),replace=FALSE)
+
+# Creating training and test sets.
+nba_train <- nba_merged4[sample12,]
+nba_test <- nba_merged4[-sample12,]
+
+```
+
+
+```{r}
+ggplot(data = nba_sample, aes(x = PPG, y = MP,col = Pos)) +
+  geom_point(position = 'jitter', alpha = 0.3) +
+  scale_x_continuous(limits = c(1,35), breaks = seq(1,35,2),
+                     name = 'PPG') +
+  scale_y_continuous(limits = c(0,40), breaks = seq(0,40,2),
+                     name = 'Mins per game') + 
+  theme_bw()
+
+```
+```{r}
+ggplot(data = nba_merged4, aes(x = PPG, y = USGpc, col = Pos)) +
+  geom_point(position = 'jitter', alpha = 0.3) +
+  scale_x_continuous(limits = c(1,35), breaks = seq(1,35,2),
+                     name = 'PPG') +
+  scale_y_continuous(limits = c(0,40), breaks = seq(0,40,2),
+                     name = 'Mins per game') +
+  theme_bw()
+```
+
+```{r}
+count <- table(nba_merged4$Pos)
+count
+boxplot(PPG ~ Pos, data = nba_merged4,notch = TRUE)
+```
+
+
+```{r}
+nba_reduced <- nba_merged4 %>%
+  filter(PPG<30) %>%
+  select(PPG,USGpc,AST,TRB,MP,TOV)
+
+cor(nba_reduced)
+
+```
+
+```{r}
+model1 <- lm(PPG ~ AST + MP, data = nba_sample)
+summary(model1)
+
+```
+
+
+## Bootstrap resample of linear model.
+```{r}
+set.seed(600)
+boot_results1 <- do(1000)*lm(PPG ~ AST + MP + Pos + TRB, data = resample(nba_sample))
+
+```
+
+
+```{r}
+boot_predict1 <- boot_results1 %>%
+  mutate(total_value = Intercept + 8.5*AST + 31.6*MP + PosSF)
+
+quantile(boot_predict1$total_value,c(0.05,0.95))
+
+```
+
+```{r}
+model_null <- mean(nba_train$PPG)
+
+modela <- lm(PPG ~ Pos, data = nba_train)
+modelb <- lm(PPG ~ MP, data = nba_train)
+modelc <- lm(PPG ~ AST, data = nba_train)
+modeld <- lm(PPG ~ USGpc, data = nba_train)
+modele <- lm(PPG ~ TOV, data = nba_train)
+modelf <- lm(PPG ~ TRB, data = nba_train)
+
+model1a <- lm(PPG ~ Pos + AST, data = nba_train)
+model1b <- lm(PPG ~ Pos + USGpc, data = nba_train)
+model1c <- lm(PPG ~ Pos + TOV, data = nba_train)
+model1d <- lm(PPG ~ Pos + MP, data = nba_train)
+model1e <- lm(PPG ~ MP + TOV, data = nba_train)
+model1f <- lm(PPG ~ MP + AST, data = nba_train)
+model1g <- lm(PPG ~ MP + USGpc, data = nba_train)
+model1h <- lm(PPG ~ TOV + AST, data = nba_train)
+model1i <- lm(PPG ~ USGpc + AST, data = nba_train)
+model1j <- lm(PPG ~ TRB + AST, data = nba_train)
+model1k <- lm(PPG ~ TOV + TRB, data = nba_train)
+model1m <- lm(PPG ~ TRB + USGpc, data = nba_train)
+model1n <- lm(PPG ~ TOV + USGpc, data = nba_train)
+
+```
+
+
+```{r}
+summary(modela)$r.squared
+summary(modelb)$r.squared
+summary(modelc)$r.squared
+summary(modeld)$r.squared
+summary(modele)$r.squared
+summary(modelf)$r.squared
+```
+
+```{r}
+summary(model1a)$r.squared
+summary(model1b)$r.squared
+summary(model1c)$r.squared
+summary(model1d)$r.squared
+summary(model1e)$r.squared
+summary(model1f)$r.squared
+summary(model1g)$r.squared
+summary(model1h)$r.squared
+summary(model1i)$r.squared
+summary(model1j)$r.squared
+summary(model1k)$r.squared
+summary(model1m)$r.squared
+summary(model1n)$r.squared
+
+```
+
+```{r}
+
+model2a <- lm(PPG ~ Pos + USGpc + AST, data = nba_train)
+model2b <- lm(PPG ~ Pos + USGpc + MP, data = nba_train)
+model2c <- lm(PPG ~ TOV + TRB + AST, data = nba_train)
+model2d <- lm(PPG ~ TOV + USGpc + AST, data = nba_train)
+model2e <- lm(PPG ~ TRB + MP + AST, data = nba_train)
+model2g <- lm(PPG ~ MP + USGpc + AST, data = nba_train)
+model2h <- lm(PPG ~ MP + USGpc + TRB , data = nba_train)
+model2i <- lm(PPG ~ Pos + MP + TOV, data = nba_train)
+model2j <- lm(PPG ~ TRB + STL + AST, data = nba_train)
+model2k <- lm(PPG ~ STL + Pos + USGpc, data = nba_train)
+model2m <- lm(PPG ~ STL + MP + AST, data = nba_train)
+model2n <- lm(PPG ~ STL + Pos + MP, data = nba_train)
+
+```
+
+
+```{r}
+summary(model2a)$r.squared
+summary(model2b)$r.squared
+summary(model2c)$r.squared
+summary(model2d)$r.squared
+summary(model2e)$r.squared
+summary(model2g)$r.squared
+summary(model2h)$r.squared
+summary(model2i)$r.squared
+summary(model2j)$r.squared
+summary(model2k)$r.squared
+summary(model2m)$r.squared
+summary(model2n)$r.squared
+
+```
+
+```{r}
+model3a <- lm(PPG ~ TRB + AST + MP + USGpc, data = nba_train)
+model3b <-  lm(PPG ~ TOV + Pos + MP + USGpc, data = nba_train)
+model3c <-  lm(PPG ~ AST + Pos + MP + USGpc, data = nba_train)
+
+summary(model3a)$r.squared
+summary(model3b)$r.squared
+summary(model3c)$r.squared
+
+```
+
+```{r}
+rmse_null <- nba_test %>%
+  mutate(pred_PPG = model_null,
+         SE = (PPG - pred_PPG)^2) %>%
+  summarize(RMSE = sqrt(mean(SE)))
+
+rmse_1g <- nba_test %>%
+  mutate(pred_PPG = predict(model1g, newdata = nba_test),
+         SE = (PPG - pred_PPG)^2) %>%
+  summarize(RMSE = sqrt(mean(SE)))
+
+rmse_2b <- nba_test %>%
+  mutate(pred_PPG = predict(model2b, newdata = nba_test),
+         SE = (PPG - pred_PPG)^2) %>%
+  summarize(RMSE = sqrt(mean(SE)))
+
+rmse_3b <- nba_test %>%
+  mutate(pred_PPG = predict(model3b, newdata = nba_test),
+         SE = (PPG - pred_PPG)^2) %>%
+  summarize(RMSE = sqrt(mean(SE)))
+
+rmse_combine <- data.frame(PREDS = c(0,2,3,4),
+                           RMSE = c(rmse_null$RMSE, rmse_1g$RMSE, rmse_2b$RMSE,rmse_3b$RMSE))
+```
+
+
+```{r}
+ggplot(data=rmse_combine,aes(x=PREDS,y=RMSE,group=1)) +
+  geom_point(color='blue',size = 2) +
+  geom_line(color='blue',size=0.25,linetype='dashed') +
+  labs(x='Number of Predictors',y='Root Mean Squared-Error') +
+  theme_bw()
+```
+
+```{r}
+set.seed(600)
+boot_results2 <- do(1000)*lm(PPG ~ Pos + MP + USGpc, data = resample(nba_train))
+```
+
+```{r}
+boot_predict2 <- boot_results2 %>%
+  mutate(total_value = Intercept + 30*USGpc + 25*MP + PosSF)
+
+quantile(boot_predict2$total_value,c(0.05,0.95))
+
+```
+
+
+```{r}
+plot(boot_results2)
+```
+
+
+```{r}
+print(boot_results2)
+
+```
+
+
+```{r}
+summary(boot_results2)
+```
+
+
+
+
